@@ -4,6 +4,7 @@ class SignupRequest(BaseModel):
     name: str
     email: EmailStr
     password: str
+    role: str = "client"
 
 class LoginRequest(BaseModel):
     email: EmailStr
@@ -12,8 +13,8 @@ class LoginRequest(BaseModel):
 class UserResponse(BaseModel):
     id: int
     name: str
-    email: str
+    email: EmailStr
     role: str
 
     class Config:
-        from_attributes = True
+        orm_mode = True
