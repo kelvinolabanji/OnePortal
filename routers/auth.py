@@ -1,46 +1,28 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
+from pydantic import BaseModel, EmailStr
 from sqlalchemy.orm import Session
-
-from database import get_db
-from models import User
-from schemas import SignupRequest, LoginRequest
-from auth_utils import hash_password, verify_password, create_token
+from database import get_db, User
+from passlib.hash import bcrypt
 
 router = APIRouter()
 
+class SignupRequest(BaseModel):
+    name: str
+    email: EmailStr
+    password: str
+    role: str = "client"  # default to client
+
 @router.post("/signup")
-def signup(data: SignupRequest, db: Session = Depends(get_db)):
-    existing = db.query(User).filter(User.email == data.email).first()
-    if existing:
-        raise HTTPException(status_code=400, detail="Email already registered")
+def signup(request: SignupRequest, db: Session = Depends(get_db)):
+    # Check if user already exists
+    existing_user = db.query(User).filter(User.email == request.email).first()
+    if existing_user:
+        raise HTTPException(status_code=400, detail="User already exists")
 
-    user = User(
-        name=data.name,
-        email=data.email,
-        password=hash_password(data.password)
-    )
-
-    db.add(user)
+    # Hash password and create user
+    hashed_pw = bcrypt.hash(request.password)
+    new_user = User(name=request.name, email=request.email, password=hashed_pw, role=request.role)
+    db.add(new_user)
     db.commit()
-    db.refresh(user)
-
-    return {"message": "Signup successful"}
-
-@router.post("/login")
-def login(data: LoginRequest, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.email == data.email).first()
-
-    if not user or not verify_password(data.password, user.password):
-        raise HTTPException(status_code=401, detail="Invalid credentials")
-
-    token = create_token({"sub": user.email})
-
-    return {
-        "token": token,
-        "user": {
-            "id": user.id,
-            "name": user.name,
-            "email": user.email,
-            "role": user.role
-        }
-    }
+    db.refresh(new_user)
+    return {"message": "Signup successful", "user_id": new_user.id}
